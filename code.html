@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>حصة قرآنية</title>
+  <style>
+    :root{--accent:#0b6efd;--bg:#f7f7fb;--card:#fff}
+    *{box-sizing:border-box}
+    body{font-family:Tahoma, Arial, "Noto Naskh Arabic", sans-serif;background:var(--bg);color:#111;margin:0;padding:20px}
+    .container{max-width:980px;margin:0 auto}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    h1{font-size:20px;margin:0}
+    .date-box{background:var(--card);padding:10px 12px;border-radius:10px;box-shadow:0 2px 6px rgba(20,20,40,0.04);text-align:center}
+    .big{font-weight:700}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 2px 6px rgba(20,20,40,0.04);margin-bottom:12px}
+    label{display:block;font-size:13px;margin-bottom:6px}
+    input[type=text], input[type=number], select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd}
+    .row{display:flex;gap:10px}
+    .col{flex:1}
+    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    button.secondary{background:#6c757d}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:center}
+    th{background:#fbfbff}
+    .actions button{margin-left:6px}
+    .muted{color:#666;font-size:13px}
+    .small{font-size:13px}
+    .flex-between{display:flex;justify-content:space-between;align-items:center}
+    .rating-select{width:140px}
+    @media (max-width:720px){header{flex-direction:column;align-items:flex-start} .row{flex-direction:column}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>نظام تسجيل الحصة القرآنية</h1>
+        <div class="muted small">اكتب أسماء الطلاب وقيّم آياتهم وصفحاتهم</div>
+      </div>
+      <div class="date-box">
+        <div id="gregorian" class="big">--</div>
+        <div id="weekday" class="muted small">--</div>
+        <div id="hijri" class="muted small">--</div>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="flex-between">
+        <strong>تفاصيل الجلسة</strong>
+        <div class="muted small">المعلومات تحفظ تلقائياً في متصفحك</div>
+      </div>
+      <div style="margin-top:10px" class="row">
+        <div class="col">
+          <label>الآية (مثلاً: البقرة 255)</label>
+          <input id="sessionAyah" type="text" placeholder="اكتب الآية أو السورة والآية">
+        </div>
+        <div class="col">
+          <label>الصفحة</label>
+          <input id="sessionPage" type="number" min="1" placeholder="رقم الصفحة">
+        </div>
+        <div style="flex:0 0 160px;display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
+          <button id="clearSession">مسح الجلسة</button>
+          <button id="loadDefaults" class="secondary">املأ للطلاب تلقائياً</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <strong>قائمة الطلاب</strong>
+      <div style="margin-top:10px" class="row">
+        <div class="col">
+          <label>اسم الطالب</label>
+          <input id="studentName" type="text" placeholder="اكتب اسم الطالب ثم اضغط إضافة">
+        </div>
+        <div style="flex:0 0 130px;display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
+          <button id="addStudent">إضافة طالب</button>
+        </div>
+      </div>
+
+      <table id="studentsTable" aria-live="polite">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>الاسم</th>
+            <th>الآية</th>
+            <th>الصفحة</th>
+            <th>المعدل</th>
+            <th>إجراءات</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button id="exportCsv">تصدير CSV</button>
+        <button id="print" class="secondary">طباعة</button>
+        <button id="clearAll" class="secondary">مسح الكل</button>
+      </div>
+    </section>
+
+    <footer class="muted small" style="text-align:center;margin-top:18px">صُمم لك لتشغيله محلياً فقط احفظ الملف وافتحه في المتصفح</footer>
+  </div>
+
+  <script>
+    // ---------- إعداد التاريخ الميلادي والهجري واسم اليوم ----------
+    function updateDates(){
+      const now = new Date();
+      // اسم اليوم بالغة العربية
+      const weekday = new Intl.DateTimeFormat('ar-SA', {weekday:'long'}).format(now);
+      // التاريخ الميلادي
+      const greg = new Intl.DateTimeFormat('ar-SA', {day:'numeric', month:'long', year:'numeric'}).format(now);
+      // التاريخ الهجري (يعتمد على دعم المتصفح)
+      let hijri = '';
+      try{
+        hijri = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {day:'numeric', month:'long', year:'numeric'}).format(now);
+      }catch(e){
+        // إذا لم يدعم المتصفح التقويم الهجري
+        hijri = 'غير متاح في متصفحك' ;
+      }
+      document.getElementById('weekday').textContent = weekday;
+      document.getElementById('gregorian').textContent = greg;
+      document.getElementById('hijri').textContent = 'هجري: ' + hijri;
+    }
+    updateDates();
+
+    // ---------- إدارة الطلاب في localStorage ----------
+    const LS_KEY = 'quranSessionStudents_v1';
+    const LS_SESSION = 'quranSessionMeta_v1';
+
+    function loadSessionMeta(){
+      const raw = localStorage.getItem(LS_SESSION);
+      if(!raw) return {ayah:'', page:''};
+      try{ return JSON.parse(raw);}catch(e){return {ayah:'', page:''}}
+    }
+    function saveSessionMeta(obj){ localStorage.setItem(LS_SESSION, JSON.stringify(obj)); }
+
+    function loadStudents(){
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return [];
+      try{ return JSON.parse(raw);}catch(e){return []}
+    }
+    function saveStudents(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+
+    // ---------- عناصر DOM ----------
+    const tbody = document.querySelector('#studentsTable tbody');
+    const nameInput = document.getElementById('studentName');
+    const addBtn = document.getElementById('addStudent');
+    const sessionAyah = document.getElementById('sessionAyah');
+    const sessionPage = document.getElementById('sessionPage');
+    const loadDefaultsBtn = document.getElementById('loadDefaults');
+    const clearSessionBtn = document.getElementById('clearSession');
+
+    const exportCsvBtn = document.getElementById('exportCsv');
+    const printBtn = document.getElementById('print');
+    const clearAllBtn = document.getElementById('clearAll');
+
+    let students = loadStudents();
+    const meta = loadSessionMeta();
+    sessionAyah.value = meta.ayah || '';
+    sessionPage.value = meta.page || '';
+
+    const RATINGS = [
+      'يحتاج الى تحسين',
+      'جيد',
+      'جيد جدا',
+      'ممتاز',
+      'مثالي'
+    ];
+
+    function render(){
+      tbody.innerHTML = '';
+      students.forEach((s, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td><input data-index="${i}" class="inp-name" value="${escapeHtml(s.name)}" /></td>
+          <td><input data-index="${i}" class="inp-ayah" value="${escapeHtml(s.ayah||'')}" placeholder="مثال: البقرة 255" /></td>
+          <td><input data-index="${i}" class="inp-page" type="number" min="1" value="${s.page||''}" /></td>
+          <td>
+            <select data-index="${i}" class="rating-select">
+              ${RATINGS.map(r=>`<option ${s.rating===r? 'selected':''}>${r}</option>`).join('')}
+            </select>
+          </td>
+          <td class="actions">
+            <button data-index="${i}" class="save">حفظ</button>
+            <button data-index="${i}" class="remove">حذف</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // ربط أزرار الحفظ والحذف
+      tbody.querySelectorAll('button.save').forEach(b=>b.addEventListener('click',e=>{
+        const i = +e.currentTarget.dataset.index;
+        const row = tbody.querySelectorAll('tr')[i];
+        const name = row.querySelector('.inp-name').value.trim();
+        const ayah = row.querySelector('.inp-ayah').value.trim();
+        const page = row.querySelector('.inp-page').value.trim();
+        const rating = row.querySelector('select').value;
+        students[i] = {name, ayah, page, rating};
+        saveStudents(students);
+        render();
+      }));
+
+      tbody.querySelectorAll('button.remove').forEach(b=>b.addEventListener('click',e=>{
+        const i = +e.currentTarget.dataset.index;
+        if(!confirm('هل تريد حذف هذا الطالب؟')) return;
+        students.splice(i,1);
+        saveStudents(students);
+        render();
+      }));
+    }
+
+    function escapeHtml(s){ return (s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    addBtn.addEventListener('click', ()=>{
+      const name = nameInput.value.trim();
+      if(!name){ alert('اكتب اسم الطالب أولاً'); nameInput.focus(); return; }
+      const newS = {name, ayah: sessionAyah.value.trim() || '', page: sessionPage.value.trim() || '', rating: RATINGS[0] };
+      students.push(newS);
+      saveStudents(students);
+      nameInput.value = '';
+      render();
+    });
+
+    // اضغط على Enter لإضافة
+    nameInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') addBtn.click(); });
+
+    // تحميل القيم إلى كل الطلاب (آية وصفحة)
+    loadDefaultsBtn.addEventListener('click', ()=>{
+      const ay = sessionAyah.value.trim();
+      const pg = sessionPage.value.trim();
+      if(!ay && !pg){ alert('أدخل آية أو صفحة أولاً'); return; }
+      students = students.map(s=>({ ...s, ayah: ay || s.ayah, page: pg || s.page }));
+      saveStudents(students);
+      render();
+    });
+
+    clearSessionBtn.addEventListener('click', ()=>{
+      if(!confirm('هل تريد مسح معلومات الجلسة (الآية والصفحة)؟')) return;
+      sessionAyah.value = '';
+      sessionPage.value = '';
+      saveSessionMeta({ayah:'', page:''});
+    });
+
+    // حفظ ميتا عند التغيير
+    sessionAyah.addEventListener('change', ()=>{ saveSessionMeta({ayah: sessionAyah.value, page: sessionPage.value}); });
+    sessionPage.addEventListener('change', ()=>{ saveSessionMeta({ayah: sessionAyah.value, page: sessionPage.value}); });
+
+    // تصدير CSV
+    exportCsvBtn.addEventListener('click', ()=>{
+      if(students.length===0){ alert('لا يوجد طلاب للتصدير'); return; }
+      const header = ['الاسم','الآية','الصفحة','المعدل'];
+      const rows = students.map(s=>[s.name || '', s.ayah || '', s.page || '', s.rating || '']);
+      const csv = [header, ...rows].map(r=>r.map(cell=>`"${(cell+'').replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quran_session_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // طباعة
+    printBtn.addEventListener('click', ()=>{
+      window.print();
+    });
+
+    // مسح الكل
+    clearAllBtn.addEventListener('click', ()=>{
+      if(!confirm('هل تريد مسح جميع الطلاب (وإعادة ضبط)؟')) return;
+      students = [];
+      saveStudents(students);
+      render();
+    });
+
+    // render الأولي
+    render();
+
+    // إعادة تحميل التواريخ كل دقيقة (ليس ضروري لكن مفيد لو الصفحة مفتوحة طول اليوم)
+    setInterval(updateDates, 60_000);
+  </script>
+</body>
+</html>
